@@ -290,121 +290,121 @@ send_tg() {
 # =============================================================
 
 pay "Jupiter: Price (0.002 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/jupiter/api/price","method":"POST","body":{"ids":"So11111111111111111111111111111111111111112"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/jupiter/api/price","method":"POST","body":{"ids":"So11111111111111111111111111111111111111112"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Jupiter: Tokens (0.002 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/jupiter/api/tokens","method":"POST","body":{"query":"USDC"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/jupiter/api/tokens","method":"POST","body":{"query":"USDC"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "CoinGecko: Price (0.002 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/coingecko/api/price","method":"POST","body":{"ids":"bitcoin,solana,ethereum"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/coingecko/api/price","method":"POST","body":{"ids":"bitcoin,solana,ethereum"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "CoinGecko: Search (0.003 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/coingecko/api/search","method":"POST","body":{"query":"solana"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/coingecko/api/search","method":"POST","body":{"query":"solana"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "CoinGecko: Token Info (0.005 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/coingecko/api/token-info","method":"POST","body":{"id":"solana"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/coingecko/api/token-info","method":"POST","body":{"id":"solana"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "CoinGecko: Markets (0.005 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/coingecko/api/markets","method":"POST","body":{"vs_currency":"usd","ids":"bitcoin,ethereum,solana"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/coingecko/api/markets","method":"POST","body":{"vs_currency":"usd","ids":"bitcoin,ethereum,solana"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Twitter: Search Tweets (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/twitter/api/search-tweets","method":"POST","body":{"query":"AI agents","queryType":"Latest","cursor":""},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/twitter/api/search-tweets","method":"POST","body":{"query":"AI agents","queryType":"Latest","cursor":""},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Twitter: User Tweets (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/twitter/api/user-tweets","method":"POST","body":{"userName":"elonmusk"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/twitter/api/user-tweets","method":"POST","body":{"userName":"elonmusk"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Twitter: Trends (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/twitter/api/trends","method":"POST","body":{"woeid":1,"count":10},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/twitter/api/trends","method":"POST","body":{"woeid":1,"count":10},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Twitter: Tweet Replies (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/twitter/api/tweet-replies","method":"POST","body":{"tweetId":"1234567890","cursor":"","queryType":"Latest"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/twitter/api/tweet-replies","method":"POST","body":{"tweetId":"1234567890","cursor":"","queryType":"Latest"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Exa: Search (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/exa/api/search","method":"POST","body":{"query":"AgentWallet x402 CASH payment","numResults":3},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/exa/api/search","method":"POST","body":{"query":"AgentWallet x402 CASH payment","numResults":3},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Exa: Answer (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/exa/api/answer","method":"POST","body":{"query":"What is AgentWallet?"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/exa/api/answer","method":"POST","body":{"query":"What is AgentWallet?"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Exa: Find Similar (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/exa/api/find-similar","method":"POST","body":{"url":"https://frames.ag","numResults":3},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/exa/api/find-similar","method":"POST","body":{"url":"https://frames.ag","numResults":3},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AgentMail: Create Inbox (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/agentmail/api/inbox/create","method":"POST","body":{"username":"myagent","display_name":"My Agent"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/agentmail/api/inbox/create","method":"POST","body":{"username":"myagent","display_name":"My Agent"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AgentMail: Send Email (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/agentmail/api/send","method":"POST","body":{"inbox_id":"test","to":[{"email":"test@example.com"}],"subject":"Hello from AgentWallet","text":"Test email from AI agent"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/agentmail/api/send","method":"POST","body":{"inbox_id":"test","to":[{"email":"test@example.com"}],"subject":"Hello from AgentWallet","text":"Test email from AI agent"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "NEAR Intents: Quote (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/near-intents/api/quote","method":"POST","body":{"inputCurrency":"USDC","outputCurrency":"SOL","amount":"1"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/near-intents/api/quote","method":"POST","body":{"inputCurrency":"USDC","outputCurrency":"SOL","amount":"1"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "OpenRouter: GPT-4o (0.01 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/openrouter/v1/chat/completions","method":"POST","body":{"model":"openai/gpt-4o","messages":[{"role":"user","content":"Explain quantum computing in simple terms"}]},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/openrouter/v1/chat/completions","method":"POST","body":{"model":"openai/gpt-4o","messages":[{"role":"user","content":"Explain quantum computing in simple terms"}]},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Twitter: Batch Users (0.02 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/twitter/api/batch-users","method":"POST","body":{"userIds":"44196397,783214"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/twitter/api/batch-users","method":"POST","body":{"userIds":"44196397,783214"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Minimax Music (0.042 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/music-01","prompt":"An upbeat electronic music track about the future"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/music-01","prompt":"An upbeat electronic music track about the future"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Nano Banana (0.05 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana","prompt":"A stunning galaxy in deep space ultra detailed"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana","prompt":"A stunning galaxy in deep space ultra detailed"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Trellis 3D (0.054 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"firtoz/trellis","prompt":"A futuristic robot"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"firtoz/trellis","prompt":"A futuristic robot"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Insanely Fast Whisper (0.06 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"turian/insanely-fast-whisper-with-video","audio_url":"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"turian/insanely-fast-whisper-with-video","audio_url":"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Wan 2.2 I2V Fast (0.07 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"wan-video/wan-2.2-i2v-fast","prompt":"A beautiful waterfall in a jungle"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"wan-video/wan-2.2-i2v-fast","prompt":"A beautiful waterfall in a jungle"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Wan 2.2 T2V Fast (0.12 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"wan-video/wan-2.2-t2v-fast","prompt":"A beautiful waterfall in a jungle"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"wan-video/wan-2.2-t2v-fast","prompt":"A beautiful waterfall in a jungle"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Nano Banana 2 (0.13 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana-2","prompt":"A stunning galaxy in deep space"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana-2","prompt":"A stunning galaxy in deep space"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: DALL-E 3 (0.15 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/dall-e-3","prompt":"A beautiful sunset over the ocean photorealistic"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/dall-e-3","prompt":"A beautiful sunset over the ocean photorealistic"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Nano Banana Pro (0.18 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana-pro","prompt":"A futuristic robot in a magical forest ultra detailed"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana-pro","prompt":"A futuristic robot in a magical forest ultra detailed"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Hunyuan 3D 3.1 (0.20 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"tencent/hunyuan-3d-3.1","prompt":"A futuristic robot with detailed PBR materials"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"tencent/hunyuan-3d-3.1","prompt":"A futuristic robot with detailed PBR materials"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Runway Gen-4 Turbo (0.30 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"runwayml/gen4-turbo","prompt":"A person running through a futuristic city","duration":5,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"runwayml/gen4-turbo","prompt":"A person running through a futuristic city","duration":5,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Seedance 1 Pro 1080p (0.36 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"bytedance/seedance-1-pro","prompt":"A beautiful waterfall in a tropical jungle","duration":6,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"bytedance/seedance-1-pro","prompt":"A beautiful waterfall in a tropical jungle","duration":6,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Kling v2.6 10s (0.42 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"kwaivgi/kling-v2.6","prompt":"A cinematic landscape with dramatic lighting","duration":10,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"kwaivgi/kling-v2.6","prompt":"A cinematic landscape with dramatic lighting","duration":10,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Minimax Video-01 (0.6 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/video-01","prompt":"A robot walking through a neon city"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/video-01","prompt":"A robot walking through a neon city"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Sora 2 720p (0.6 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2","prompt":"A stunning sunset over a futuristic city","duration":5,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2","prompt":"A stunning sunset over a futuristic city","duration":5,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Veo 3 Fast 8s (0.9 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3-fast","prompt":"A futuristic city with flying cars","duration":8,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3-fast","prompt":"A futuristic city with flying cars","duration":8,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: VEED Fabric Talking Head (0.9 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"veed/fabric-1.0","prompt":"A person talking about the future of AI"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"veed/fabric-1.0","prompt":"A person talking about the future of AI"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Sora 2 Pro 1080p (1.8 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2-pro","prompt":"A cinematic robot walking through a neon city","duration":5,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2-pro","prompt":"A cinematic robot walking through a neon city","duration":5,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "Wordspace Agent (2.0 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/wordspace/api/invoke","method":"POST","body":{"prompt":"Write a detailed story about AI agents changing the world"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/wordspace/api/invoke","method":"POST","body":{"prompt":"Write a detailed story about AI agents changing the world"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Veo 3 (2.4 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3","prompt":"A futuristic city with flying cars and neon lights","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3","prompt":"A futuristic city with flying cars and neon lights","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 sleep $DELAY
 pay "AI Gen: Veo 3.1 (2.4 CASH)" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3.1","prompt":"A stunning ocean sunset with dramatic clouds","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"$DR}'
+  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3.1","prompt":"A stunning ocean sunset with dramatic clouds","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH","dryRun":true}'
 
 # =============================================================
 # SUMMARY
