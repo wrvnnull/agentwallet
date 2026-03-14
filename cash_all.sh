@@ -165,7 +165,8 @@ echo "  Sekarang   : ${OWN_CASH} CASH"
 
 # Deteksi CASH masuk ke wallet sendiri
 OWN_HIGHER=$(python3 -c "print('yes' if ${OWN_CASH} > ${OWN_LAST:-0} else 'no')" 2>/dev/null || echo "no")
-if [[ "$OWN_HIGHER" == "yes" ]]; then
+# Notif CASH masuk hanya kalau OWN_LAST bukan 0 (bukan first run)
+if [[ "$OWN_HIGHER" == "yes" && "$OWN_LAST" != "0" && -n "$OWN_LAST" ]]; then
   DIFF=$(python3 -c "print(f'{${OWN_CASH}-${OWN_LAST:-0}:.6f}')" 2>/dev/null || echo "0")
   echo "  Ada CASH masuk! +${DIFF} CASH"
   send_tg_msg "💰 CASH MASUK ke wallet kamu!
@@ -237,8 +238,16 @@ Waktu   : $(date -u '+%H:%M:%S') UTC"
 
   PAID=$(echo "$RESULT" | grep -o '"paid":[^,}]*' | cut -d: -f2 | tr -d ' ')
   AMT_PAID=$(echo "$RESULT" | grep -o '"amountFormatted":"[^"]*"' | cut -d'"' -f4)
-  ERR=$(echo "$RESULT" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
-  MSG_ERR=$(echo "$RESULT" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
+  ERR=$(echo "$RESULT" | python3 -c "
+import sys,json
+try:
+    d=json.loads(sys.stdin.read())
+    r=d.get('response',{})
+    b=r.get('body',{}) if isinstance(r,dict) else {}
+    err=d.get('error') or d.get('message') or b.get('error') or b.get('message') or ''
+    print(str(err)[:120])
+except: print('')
+" 2>/dev/null)
 
   if [[ "$PAID" == "true" ]]; then
     echo "  OK  : ${AMT_PAID}"
@@ -255,14 +264,14 @@ Sisa     : ${OWN_CASH} CASH
 Progress : ${TOTAL_OK} OK / ${TOTAL_FAIL} FAIL dari ${TOTAL} service
 Waktu    : $(date -u '+%H:%M:%S') UTC"
   else
-    REASON="${ERR:-${MSG_ERR:-unknown}}"
-    echo "  FAIL: ${REASON:0:80}"
-    LOG="${LOG}\n❌ ${NAME}: ${REASON:0:50}"
+    REASON="${ERR:-unknown}"
+    echo "  FAIL: ${REASON:0:120}"
+    LOG="${LOG}\n❌ ${NAME}: ${REASON:0:80}"
     TOTAL_FAIL=$((TOTAL_FAIL + 1))
     send_tg_msg "❌ [${TOTAL}] ${NAME}
-Error   : ${REASON:0:100}
-Progress: ${TOTAL_OK} OK / ${TOTAL_FAIL} FAIL dari ${TOTAL} service
-Waktu   : $(date -u '+%H:%M:%S') UTC"
+Error    : ${REASON:0:150}
+Progress : ${TOTAL_OK} OK / ${TOTAL_FAIL} FAIL dari ${TOTAL}
+Waktu    : $(date -u '+%H:%M:%S') UTC"
   fi
 }
 
