@@ -431,6 +431,96 @@ send_tg() {
     -d "{\"chat_id\":\"${TG_CHAT}\",\"text\":\"$1\",\"parse_mode\":\"HTML\"}" > /dev/null
 }
 
+
+# =============================================================
+# FASE AWAL — SEMUA FITUR AGENTWALLET (sebelum x402 payments)
+# =============================================================
+
+# 1. Cek stats + referrals + pulse
+echo "── FASE AWAL: Stats + Referrals + Pulse ─────────────────"
+STATS=$(curl -s "https://frames.ag/api/wallets/${USER}/stats" -H "Authorization: Bearer ${TOKEN}")
+REFS=$(curl -s "https://frames.ag/api/wallets/${USER}/referrals" -H "Authorization: Bearer ${TOKEN}")
+PULSE=$(curl -s "https://frames.ag/api/network/pulse")
+RANK=$(echo "$STATS" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('rank','?'))" 2>/dev/null || echo "?")
+STREAK=$(echo "$STATS" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('streakDays','?'))" 2>/dev/null || echo "?")
+REF_PTS=$(echo "$REFS" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('airdropPoints','?'))" 2>/dev/null || echo "?")
+REF_CNT=$(echo "$REFS" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('referralCount','?'))" 2>/dev/null || echo "?")
+REF_TIER=$(echo "$REFS" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('tier','?'))" 2>/dev/null || echo "?")
+AGENTS=$(echo "$PULSE" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('activeAgents','?'))" 2>/dev/null || echo "?")
+echo "  Rank: #${RANK} | Streak: ${STREAK}d | Pts: ${REF_PTS} | Refs: ${REF_CNT} | Tier: ${REF_TIER}"
+echo "  Active Agents: ${AGENTS}"
+
+# 2. Sign message EVM + Solana
+echo "── Sign Message (EVM + Solana) ──────────────────────────"
+MSG_SIGN="AgentWallet | ${NOW} | ${USER}"
+SIGN_EVM=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/actions/sign-message" \
+  -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+  -d "{\"message\":\"${MSG_SIGN}\",\"chain\":\"ethereum\"}")
+SIGN_EVM_OK=$(echo "$SIGN_EVM" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print('OK' if d.get('signature') or d.get('status') else 'FAIL')" 2>/dev/null || echo "FAIL")
+echo "  Sign EVM    : ${SIGN_EVM_OK}"
+sleep 2
+
+SIGN_SOL=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/actions/sign-message" \
+  -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+  -d "{\"message\":\"${MSG_SIGN}\",\"chain\":\"solana\"}")
+SIGN_SOL_OK=$(echo "$SIGN_SOL" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print('OK' if d.get('signature') or d.get('status') else 'FAIL')" 2>/dev/null || echo "FAIL")
+echo "  Sign Solana : ${SIGN_SOL_OK}"
+sleep 2
+
+# 3. Faucet SOL devnet
+echo "── Faucet SOL Devnet ────────────────────────────────────"
+FAUCET=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/actions/faucet-sol" \
+  -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" -d '{}')
+FAUCET_AMT=$(echo "$FAUCET" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('amount','?'))" 2>/dev/null || echo "?")
+FAUCET_REM=$(echo "$FAUCET" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('remaining','?'))" 2>/dev/null || echo "?")
+echo "  Faucet: ${FAUCET_AMT} | Remaining: ${FAUCET_REM}/3"
+sleep 2
+
+# 4. Manual x402 sign (dry)
+echo "── Manual x402 Sign (dry) ───────────────────────────────"
+MANUAL=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/actions/x402/pay" \
+  -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+  -d '{"requirement":{"scheme":"exact","network":"eip155:8453","maxAmountRequired":"10000","resource":"https://registry.frames.ag/api/service/exa/api/search","description":"Manual sign test","mimeType":"application/json","payTo":"0x0000000000000000000000000000000000000000","maxTimeoutSeconds":300,"asset":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","extra":{"name":"USDC","version":"2"}},"preferredChain":"evm","preferredToken":"USDC","dryRun":true}')
+MANUAL_OK=$(echo "$MANUAL" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print('OK' if d.get('success') else 'FAIL')" 2>/dev/null || echo "FAIL")
+echo "  Manual x402 sign: ${MANUAL_OK}"
+sleep 2
+
+# 5. Transfer SOL kecil ke diri sendiri (devnet - gratis)
+echo "── Transfer SOL ke diri sendiri (devnet) ────────────────"
+# Ambil solana address dulu
+SOL_ADDR=$(curl -s "https://frames.ag/api/wallets/${USER}" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('solanaAddress',''))" 2>/dev/null || echo "")
+if [[ -n "$SOL_ADDR" ]]; then
+  TRANSFER=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/actions/transfer-solana" \
+    -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+    -d "{\"to\":\"${SOL_ADDR}\",\"amount\":\"1000000\",\"asset\":\"sol\",\"network\":\"devnet\"}")
+  TX_STATUS=$(echo "$TRANSFER" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('status','FAIL'))" 2>/dev/null || echo "FAIL")
+  echo "  Transfer SOL devnet: ${TX_STATUS}"
+else
+  echo "  Transfer SOL: no address"
+fi
+sleep 2
+
+# Kirim notif Telegram ringkasan fase awal
+send_tg_msg "🚀 AgentWallet Run Dimulai
+━━━━━━━━━━━━━━━━━━━━━
+👤 User     : ${USER}
+🕐 Waktu    : ${NOW} UTC
+━━━━━━━━━━━━━━━━━━━━━
+📊 Rank     : #${RANK} | Streak: ${STREAK}d
+🎯 Refs     : ${REF_CNT} | Pts: ${REF_PTS} | Tier: ${REF_TIER}
+🌐 Agents   : ${AGENTS} aktif
+━━━━━━━━━━━━━━━━━━━━━
+✍️ Sign EVM    : ${SIGN_EVM_OK}
+✍️ Sign Solana : ${SIGN_SOL_OK}
+🚰 Faucet      : ${FAUCET_AMT} (sisa ${FAUCET_REM}/3)
+🔏 Manual sign : ${MANUAL_OK}
+💸 Transfer    : ${TX_STATUS:-skip}
+━━━━━━━━━━━━━━━━━━━━━
+💰 Balance  : ${OWN_CASH} CASH
+🏦 Reward   : ${CASH_BAL} CASH
+▶️ Mulai x402 payments..."
+
+echo ""
 # =============================================================
 # === SERVICES — termurah duluan ===
 # =============================================================
