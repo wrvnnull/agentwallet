@@ -239,20 +239,31 @@ Waktu   : $(date -u '+%H:%M:%S') UTC"
     -H "Content-Type: application/json" \
     -d "${PAYLOAD//\$DR/}")
 
-  PAID=$(echo "$RESULT" | grep -o '"paid":[^,}]*' | cut -d: -f2 | tr -d ' ')
-  AMT_PAID=$(echo "$RESULT" | grep -o '"amountFormatted":"[^"]*"' | cut -d'"' -f4)
-  ERR=$(echo "$RESULT" | python3 -c "
+  # Untuk dryRun: cek success=true, untuk real: cek paid=true
+  RESULT_STATUS=$(echo "$RESULT" | python3 -c "
 import sys,json
 try:
     d=json.loads(sys.stdin.read())
+    success = d.get('success',False)
+    paid    = d.get('paid',False)
+    dry     = d.get('dryRun',False)
     r=d.get('response',{})
     b=r.get('body',{}) if isinstance(r,dict) else {}
     err=d.get('error') or d.get('message') or b.get('error') or b.get('message') or ''
-    print(str(err)[:120])
-except: print('')
+    amt=d.get('payment',{}).get('amountFormatted','0.00 CASH') if isinstance(d.get('payment'),dict) else '0.00 CASH'
+    if (dry and success) or paid:
+        print(f'OK|{amt}|')
+    else:
+        print(f'FAIL||{str(err)[:120]}')
+except Exception as e:
+    print(f'FAIL||parse_error: {e}')
 " 2>/dev/null)
 
-  if [[ "$PAID" == "true" ]]; then
+  STATUS_TYPE=$(echo "$RESULT_STATUS" | cut -d'|' -f1)
+  AMT_PAID=$(echo "$RESULT_STATUS" | cut -d'|' -f2)
+  ERR=$(echo "$RESULT_STATUS" | cut -d'|' -f3)
+
+  if [[ "$STATUS_TYPE" == "OK" ]]; then
     echo "  OK  : ${AMT_PAID}"
     LOG="${LOG}\n✅ ${NAME}: ${AMT_PAID}"
     TOTAL_OK=$((TOTAL_OK + 1))
