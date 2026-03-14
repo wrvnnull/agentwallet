@@ -183,6 +183,7 @@ fi
 echo "$OWN_CASH" > "$OWN_CACHE"
 echo ""
 OWN_CASH_START="$OWN_CASH"
+break_script=0
 
 # =============================================================
 # UPDATE POLICY — pastikan max_per_tx cukup besar untuk semua service
@@ -234,17 +235,21 @@ except:
     NEEDED=$(python3 -c "print(f'{int("${AMT_RAW}")/1000000:.6f}')" 2>/dev/null || echo "0")
     ENOUGH=$(python3 -c "print('yes' if float('${OWN_CASH:-0}') >= float('${NEEDED:-0}') else 'no')" 2>/dev/null || echo "yes")
     if [[ "$ENOUGH" != "yes" ]]; then
-      echo "  SKIP: balance tidak cukup (punya ${OWN_CASH}, butuh ${NEEDED} CASH)"
-      LOG="${LOG}\n⏸ ${NAME}: balance kurang (${OWN_CASH} < ${NEEDED})"
+      echo "  STOP: saldo habis (punya ${OWN_CASH}, butuh ${NEEDED} CASH)"
+      LOG="${LOG}\n🔴 STOP: saldo habis (${OWN_CASH} < ${NEEDED})"
       TOTAL_FAIL=$((TOTAL_FAIL + 1))
-      send_tg_msg "⏸ [${TOTAL}] ${NAME}
+      send_tg_msg "🔴 SALDO HABIS — Script Stop!
 ━━━━━━━━━━━━━━━━━━━━━
-Status   : SKIP - balance kurang
-Punya    : ${OWN_CASH} CASH
-Butuh    : ${NEEDED} CASH
-📊 Progress : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
-🕐 Waktu    : $(date -u '+%H:%M:%S') UTC"
-      return
+💰 Sisa      : ${OWN_CASH} CASH
+💸 Butuh     : ${NEEDED} CASH
+📊 Progress  : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
+🏦 Service   : ${NAME}
+🕐 Waktu     : $(date -u '+%H:%M:%S') UTC
+━━━━━━━━━━━━━━━━━━━━━
+⏭ GH Actions cek lagi ~5 menit
+Top up CASH: https://frames.ag/u/${USER}"
+      break_script=1
+      return 99
     fi
   fi
 
@@ -310,7 +315,34 @@ except Exception as e:
       -d "{\"category\":\"other\",\"message\":\"Payment OK: ${NAME} | ${AMT_PAID} | $(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"context\":{\"service\":\"${NAME}\",\"amount\":\"${AMT_PAID}\"}}")
     FB_ID=$(echo "$FB_RESP" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('data',{}).get('id','?'))" 2>/dev/null || echo "?")
     echo "  Feedback : ${FB_ID}"
-    # Cek balance reward wallet setelah tiap service
+    # Cek cashback masuk ke wallet sendiri setelah tiap service
+    sleep 2
+    CB_BAL=$(curl -s "https://frames.ag/api/wallets/${USER}/balances" \
+      -H "Authorization: Bearer ${TOKEN}" | python3 -c "
+import sys,json
+try:
+    d=json.loads(sys.stdin.read())
+    for w in d.get('solanaWallets',[]):
+        for b in w.get('balances',[]):
+            if b.get('asset','').upper()=='CASH' and 'devnet' not in b.get('chain','').lower():
+                print(b.get('tokenAmount',{}).get('uiAmountString') or b.get('displayValues',{}).get('native','0'))
+                import sys; sys.exit()
+    print('0')
+except: print('0')
+" 2>/dev/null | tr -d '[:space:]')
+    CB_DIFF=$(python3 -c "
+try:
+    diff = float('${CB_BAL:-0}') - float('${OWN_CASH:-0}')
+    print(f'+{diff:.4f}' if diff > 0 else '0')
+except: print('0')
+" 2>/dev/null)
+    if [[ "$CB_DIFF" != "0" ]]; then
+      echo "  Cashback masuk! ${CB_DIFF} CASH"
+      OWN_CASH="$CB_BAL"
+      echo "$OWN_CASH" > "$OWN_CACHE"
+    fi
+
+    # Cek balance reward wallet — kalau < 0.05 stop, cek lagi 5 menit
     RWD_NOW=$(curl -s -X POST "https://api.mainnet-beta.solana.com" \
       -H "Content-Type: application/json" \
       -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"${REWARD_WALLET}\",{\"mint\":\"${CASH_MINT}\"},{\"encoding\":\"jsonParsed\"}]}" | python3 -c "
@@ -321,10 +353,24 @@ try:
     print(a[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmountString'] if a else '0')
 except: print('0')
 " 2>/dev/null | tr -d '[:space:]')
-    RWD_DIFF=$(python3 -c "print(f'+{float("${RWD_NOW:-0}")-float("${CASH_BAL:-0}"):.4f}' if float('${RWD_NOW:-0}') > float('${CASH_BAL:-0}') else '0')" 2>/dev/null || echo "0")
-    if [[ "$RWD_DIFF" != "0" && "$RWD_DIFF" != "+0.0000" ]]; then
-      echo "  Reward wallet naik! ${RWD_DIFF} CASH"
+    RWD_ENOUGH=$(python3 -c "print('yes' if float('${RWD_NOW:-0}') >= ${MIN_CASH} else 'no')" 2>/dev/null || echo "no")
+    echo "  Reward wallet : ${RWD_NOW} CASH"
+    if [[ "$RWD_ENOUGH" != "yes" ]]; then
+      echo "  Reward wallet < ${MIN_CASH} CASH — stop, cek lagi 5 menit"
+      send_tg_msg "⚠️ Reward wallet habis/kurang!
+━━━━━━━━━━━━━━━━━━━━━
+🏦 Reward   : ${RWD_NOW} CASH (min: ${MIN_CASH})
+📊 Progress : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
+💰 Sisa     : ${OWN_CASH} CASH
+🕐 Waktu    : $(date -u '+%H:%M:%S') UTC
+⏭ Script stop — GH Actions cek lagi ~5 menit"
+      # Update cache reward wallet
+      echo "$RWD_NOW" > "$CACHE_FILE"
+      break_script=1
+      return 99
     fi
+    # Update cache reward wallet
+    echo "$RWD_NOW" > "$CACHE_FILE"
 
     # Cek reward wallet — apakah ada CASH masuk setelah transaksi ini
     REWARD_NOW=$(curl -s -X POST "https://api.mainnet-beta.solana.com" \
@@ -392,117 +438,155 @@ send_tg() {
 pay "Jupiter: Price (0.002 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/jupiter/api/price","method":"POST","body":{"ids":"So11111111111111111111111111111111111111112"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Jupiter: Tokens (0.002 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/jupiter/api/tokens","method":"POST","body":{"query":"USDC"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "CoinGecko: Price (0.002 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/coingecko/api/price","method":"POST","body":{"ids":"bitcoin,solana,ethereum"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "CoinGecko: Search (0.003 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/coingecko/api/search","method":"POST","body":{"query":"solana"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "CoinGecko: Token Info (0.005 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/coingecko/api/token-info","method":"POST","body":{"id":"solana"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "CoinGecko: Markets (0.005 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/coingecko/api/markets","method":"POST","body":{"vs_currency":"usd","ids":"bitcoin,ethereum,solana"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Twitter: Search Tweets (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/twitter/api/search-tweets","method":"POST","body":{"query":"AI agents","queryType":"Latest","cursor":""},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Twitter: User Tweets (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/twitter/api/user-tweets","method":"POST","body":{"userName":"elonmusk"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Twitter: Trends (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/twitter/api/trends","method":"POST","body":{"woeid":1,"count":10},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Twitter: Tweet Replies (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/twitter/api/tweet-replies","method":"POST","body":{"tweetId":"1234567890","cursor":"","queryType":"Latest"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Exa: Search (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/exa/api/search","method":"POST","body":{"query":"AgentWallet x402 CASH payment","numResults":3},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Exa: Answer (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/exa/api/answer","method":"POST","body":{"query":"What is AgentWallet?"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Exa: Find Similar (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/exa/api/find-similar","method":"POST","body":{"url":"https://frames.ag","numResults":3},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AgentMail: Create Inbox (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/agentmail/api/inbox/create","method":"POST","body":{"username":"myagent","display_name":"My Agent"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AgentMail: Send Email (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/agentmail/api/send","method":"POST","body":{"inbox_id":"test","to":[{"email":"test@example.com"}],"subject":"Hello from AgentWallet","text":"Test email from AI agent"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "NEAR Intents: Quote (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/near-intents/api/quote","method":"POST","body":{"inputCurrency":"USDC","outputCurrency":"SOL","amount":"1"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "OpenRouter: GPT-4o (0.01 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/openrouter/v1/chat/completions","method":"POST","body":{"model":"openai/gpt-4o","messages":[{"role":"user","content":"Explain quantum computing in simple terms"}]},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Twitter: Batch Users (0.02 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/twitter/api/batch-users","method":"POST","body":{"userIds":"44196397,783214"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Minimax Music (0.042 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/music-01","prompt":"An upbeat electronic music track about the future"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Nano Banana (0.05 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana","prompt":"A stunning galaxy in deep space ultra detailed"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Trellis 3D (0.054 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"firtoz/trellis","prompt":"A futuristic robot"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Insanely Fast Whisper (0.06 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"turian/insanely-fast-whisper-with-video","audio_url":"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Wan 2.2 I2V Fast (0.07 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"wan-video/wan-2.2-i2v-fast","prompt":"A beautiful waterfall in a jungle"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Wan 2.2 T2V Fast (0.12 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"wan-video/wan-2.2-t2v-fast","prompt":"A beautiful waterfall in a jungle"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Nano Banana 2 (0.13 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana-2","prompt":"A stunning galaxy in deep space"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: DALL-E 3 (0.15 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/dall-e-3","prompt":"A beautiful sunset over the ocean photorealistic"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Nano Banana Pro (0.18 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/nano-banana-pro","prompt":"A futuristic robot in a magical forest ultra detailed"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Hunyuan 3D 3.1 (0.20 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"tencent/hunyuan-3d-3.1","prompt":"A futuristic robot with detailed PBR materials"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Runway Gen-4 Turbo (0.30 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"runwayml/gen4-turbo","prompt":"A person running through a futuristic city","duration":5,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Seedance 1 Pro 1080p (0.36 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"bytedance/seedance-1-pro","prompt":"A beautiful waterfall in a tropical jungle","duration":6,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Kling v2.6 10s (0.42 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"kwaivgi/kling-v2.6","prompt":"A cinematic landscape with dramatic lighting","duration":10,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Minimax Video-01 (0.6 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/video-01","prompt":"A robot walking through a neon city"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Sora 2 720p (0.6 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2","prompt":"A stunning sunset over a futuristic city","duration":5,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Veo 3 Fast 8s (0.9 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3-fast","prompt":"A futuristic city with flying cars","duration":8,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: VEED Fabric Talking Head (0.9 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"veed/fabric-1.0","prompt":"A person talking about the future of AI"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Sora 2 Pro 1080p (1.8 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2-pro","prompt":"A cinematic robot walking through a neon city","duration":5,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "Wordspace Agent (2.0 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/wordspace/api/invoke","method":"POST","body":{"prompt":"Write a detailed story about AI agents changing the world"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Veo 3 (2.4 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3","prompt":"A futuristic city with flying cars and neon lights","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY
+[[ ${break_script:-0} -eq 1 ]] && { echo "  Stop — reward wallet habis"; exit 0; }
 pay "AI Gen: Veo 3.1 (2.4 CASH)" \
   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3.1","prompt":"A stunning ocean sunset with dramatic clouds","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
 
