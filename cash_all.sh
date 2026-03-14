@@ -184,6 +184,18 @@ echo "$OWN_CASH" > "$OWN_CACHE"
 echo ""
 OWN_CASH_START="$OWN_CASH"
 
+# =============================================================
+# UPDATE POLICY — pastikan max_per_tx cukup besar untuk semua service
+# =============================================================
+echo "Update policy max_per_tx..."
+POL=$(curl -s -X PATCH "https://frames.ag/api/wallets/${USER}/policy" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"max_per_tx_usd":"100","allow_chains":["solana","base","ethereum","optimism","polygon","arbitrum","bsc","gnosis"]}')
+POL_OK=$(echo "$POL" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print('yes' if d.get('success') else 'no')" 2>/dev/null || echo "no")
+echo "  Policy update: ${POL_OK}"
+echo ""
+
 pay() {
   local NAME="$1"
   local PAYLOAD="$2"
@@ -198,36 +210,53 @@ pay() {
     -H "Content-Type: application/json" \
     -d "${PAYLOAD//\$DR/,\"dryRun\":true}")
 
-  AMT=$(echo "$DRY" | grep -o '"amountFormatted":"[^"]*"' | cut -d'"' -f4)
-  AMT_RAW=$(echo "$DRY" | grep -o '"amountRaw":"[^"]*"' | cut -d'"' -f4)
-  POLICY=$(echo "$DRY" | grep -o '"policyAllowed":[^,}]*' | cut -d: -f2 | tr -d ' ')
-  echo "  Dry : ${AMT:-unknown} | policy=${POLICY:-?} | wallet: ${OWN_CASH} CASH"
+  DRY_STATUS=$(echo "$DRY" | python3 -c "
+import sys,json
+try:
+    d=json.loads(sys.stdin.read())
+    p=d.get('payment',{})
+    amt=p.get('amountFormatted','0.00 CASH') if isinstance(p,dict) else '0.00 CASH'
+    raw=str(p.get('amountRaw','0')) if isinstance(p,dict) else '0'
+    pol=str(p.get('policyAllowed','true')) if isinstance(p,dict) else 'true'
+    suc=str(d.get('success',True))
+    print(f'{amt}|{raw}|{pol}|{suc}')
+except:
+    print('?|0|true|true')
+" 2>/dev/null)
+  AMT=$(echo "$DRY_STATUS" | cut -d'|' -f1)
+  AMT_RAW=$(echo "$DRY_STATUS" | cut -d'|' -f2)
+  POLICY=$(echo "$DRY_STATUS" | cut -d'|' -f3)
+  DRY_SUCCESS=$(echo "$DRY_STATUS" | cut -d'|' -f4)
+  echo "  Dry : ${AMT} | policy=${POLICY} | wallet: ${OWN_CASH} CASH"
 
-  # Cek apakah balance cukup
-  if [[ -n "$AMT_RAW" ]]; then
-    NEEDED=$(python3 -c "print(f'{${AMT_RAW}/1000000:.6f}')" 2>/dev/null || echo "0")
-    ENOUGH=$(python3 -c "print('yes' if float('${OWN_CASH:-0}') >= float('${NEEDED:-0}') else 'no')" 2>/dev/null || echo "no")
+  # Cek balance cukup
+  if [[ -n "$AMT_RAW" && "$AMT_RAW" != "0" ]]; then
+    NEEDED=$(python3 -c "print(f'{int("${AMT_RAW}")/1000000:.6f}')" 2>/dev/null || echo "0")
+    ENOUGH=$(python3 -c "print('yes' if float('${OWN_CASH:-0}') >= float('${NEEDED:-0}') else 'no')" 2>/dev/null || echo "yes")
     if [[ "$ENOUGH" != "yes" ]]; then
       echo "  SKIP: balance tidak cukup (punya ${OWN_CASH}, butuh ${NEEDED} CASH)"
-      LOG="${LOG}\n⏸ ${NAME}: balance tidak cukup (${OWN_CASH} < ${NEEDED})"
+      LOG="${LOG}\n⏸ ${NAME}: balance kurang (${OWN_CASH} < ${NEEDED})"
       TOTAL_FAIL=$((TOTAL_FAIL + 1))
       send_tg_msg "⏸ [${TOTAL}] ${NAME}
-Status   : SKIP - balance tidak cukup
+━━━━━━━━━━━━━━━━━━━━━
+Status   : SKIP - balance kurang
 Punya    : ${OWN_CASH} CASH
 Butuh    : ${NEEDED} CASH
-Progress : ${TOTAL_OK} OK / ${TOTAL_FAIL} FAIL dari ${TOTAL}
-Waktu    : $(date -u '+%H:%M:%S') UTC"
+📊 Progress : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
+🕐 Waktu    : $(date -u '+%H:%M:%S') UTC"
       return
     fi
   fi
 
-  if [[ "$POLICY" == "false" ]]; then
+  if [[ "$POLICY" == "False" || "$POLICY" == "false" ]]; then
     echo "  SKIP: policy denied"
     LOG="${LOG}\n⏸ ${NAME}: policy denied"
     TOTAL_FAIL=$((TOTAL_FAIL + 1))
     send_tg_msg "⏸ [${TOTAL}] ${NAME}
-Status  : SKIP (policy denied)
-Waktu   : $(date -u '+%H:%M:%S') UTC"
+━━━━━━━━━━━━━━━━━━━━━
+Status   : SKIP - policy denied
+📊 Progress : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
+🕐 Waktu    : $(date -u '+%H:%M:%S') UTC"
     return
   fi
 
@@ -274,16 +303,64 @@ except Exception as e:
       echo "$OWN_CASH" > "$OWN_CACHE"
     fi
     # Submit feedback per service — dapat cashback tambahan
+    # Submit feedback — dapat cashback tambahan
     FB_RESP=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/feedback" \
       -H "Authorization: Bearer ${TOKEN}" \
       -H "Content-Type: application/json" \
       -d "{\"category\":\"other\",\"message\":\"Payment OK: ${NAME} | ${AMT_PAID} | $(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"context\":{\"service\":\"${NAME}\",\"amount\":\"${AMT_PAID}\"}}")
     FB_ID=$(echo "$FB_RESP" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('data',{}).get('id','?'))" 2>/dev/null || echo "?")
     echo "  Feedback : ${FB_ID}"
+    # Cek balance reward wallet setelah tiap service
+    RWD_NOW=$(curl -s -X POST "https://api.mainnet-beta.solana.com" \
+      -H "Content-Type: application/json" \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"${REWARD_WALLET}\",{\"mint\":\"${CASH_MINT}\"},{\"encoding\":\"jsonParsed\"}]}" | python3 -c "
+import sys,json
+try:
+    d=json.loads(sys.stdin.read())
+    a=d.get('result',{}).get('value',[])
+    print(a[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmountString'] if a else '0')
+except: print('0')
+" 2>/dev/null | tr -d '[:space:]')
+    RWD_DIFF=$(python3 -c "print(f'+{float("${RWD_NOW:-0}")-float("${CASH_BAL:-0}"):.4f}' if float('${RWD_NOW:-0}') > float('${CASH_BAL:-0}') else '0')" 2>/dev/null || echo "0")
+    if [[ "$RWD_DIFF" != "0" && "$RWD_DIFF" != "+0.0000" ]]; then
+      echo "  Reward wallet naik! ${RWD_DIFF} CASH"
+    fi
+
+    # Cek reward wallet — apakah ada CASH masuk setelah transaksi ini
+    REWARD_NOW=$(curl -s -X POST "https://api.mainnet-beta.solana.com" \
+      -H "Content-Type: application/json" \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"${REWARD_WALLET}\",{\"mint\":\"${CASH_MINT}\"},{\"encoding\":\"jsonParsed\"}]}" | \
+      python3 -c "
+import sys,json
+try:
+    d=json.loads(sys.stdin.read())
+    accounts=d.get('result',{}).get('value',[])
+    if accounts:
+        print(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmountString'])
+    else:
+        print('0')
+except: print('0')
+" 2>/dev/null | tr -d '[:space:]')
+
+    REWARD_DIFF=$(python3 -c "
+try:
+    diff = float('${REWARD_NOW:-0}') - float('${CASH_BAL:-0}')
+    print(f'+{diff:.4f}' if diff > 0 else '0')
+except: print('0')
+" 2>/dev/null)
+    REWARD_ICON="💰"
+    if [[ "$REWARD_DIFF" == "0" || -z "$REWARD_DIFF" ]]; then
+      REWARD_ICON="⏳"
+      REWARD_DIFF="belum masuk"
+    fi
+    echo "  Reward   : ${REWARD_DIFF} (reward wallet: ${REWARD_NOW} CASH)"
+
     send_tg_msg "✅ [${TOTAL}] ${NAME}
 ━━━━━━━━━━━━━━━━━━━━━
 💸 Bayar    : ${AMT_PAID}
 💰 Sisa     : ${OWN_CASH} CASH
+${REWARD_ICON} Reward    : ${REWARD_DIFF}
+🏦 Reward Wallet: ${REWARD_NOW} CASH
 📊 Progress : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
 💬 Feedback : ${FB_ID}
 🕐 Waktu    : $(date -u '+%H:%M:%S') UTC"
