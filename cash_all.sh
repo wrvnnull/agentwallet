@@ -182,6 +182,7 @@ fi
 # Simpan balance sendiri
 echo "$OWN_CASH" > "$OWN_CACHE"
 echo ""
+OWN_CASH_START="$OWN_CASH"
 
 pay() {
   local NAME="$1"
@@ -272,20 +273,31 @@ except Exception as e:
       OWN_CASH=$(python3 -c "print(f'{float(\"${OWN_CASH:-0}\")-${AMT_RAW:-0}/1000000:.6f}')" 2>/dev/null || echo "${OWN_CASH:-0}")
       echo "$OWN_CASH" > "$OWN_CACHE"
     fi
+    # Submit feedback per service — dapat cashback tambahan
+    FB_RESP=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/feedback" \
+      -H "Authorization: Bearer ${TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "{\"category\":\"other\",\"message\":\"Payment OK: ${NAME} | ${AMT_PAID} | $(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"context\":{\"service\":\"${NAME}\",\"amount\":\"${AMT_PAID}\"}}")
+    FB_ID=$(echo "$FB_RESP" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('data',{}).get('id','?'))" 2>/dev/null || echo "?")
+    echo "  Feedback : ${FB_ID}"
     send_tg_msg "✅ [${TOTAL}] ${NAME}
-Amount   : ${AMT_PAID}
-Sisa     : ${OWN_CASH} CASH
-Progress : ${TOTAL_OK} OK / ${TOTAL_FAIL} FAIL dari ${TOTAL} service
-Waktu    : $(date -u '+%H:%M:%S') UTC"
+━━━━━━━━━━━━━━━━━━━━━
+💸 Bayar    : ${AMT_PAID}
+💰 Sisa     : ${OWN_CASH} CASH
+📊 Progress : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
+💬 Feedback : ${FB_ID}
+🕐 Waktu    : $(date -u '+%H:%M:%S') UTC"
   else
     REASON="${ERR:-unknown}"
     echo "  FAIL: ${REASON:0:120}"
     LOG="${LOG}\n❌ ${NAME}: ${REASON:0:80}"
     TOTAL_FAIL=$((TOTAL_FAIL + 1))
     send_tg_msg "❌ [${TOTAL}] ${NAME}
-Error    : ${REASON:0:150}
-Progress : ${TOTAL_OK} OK / ${TOTAL_FAIL} FAIL dari ${TOTAL}
-Waktu    : $(date -u '+%H:%M:%S') UTC"
+━━━━━━━━━━━━━━━━━━━━━
+💢 Error    : ${REASON:0:150}
+💰 Sisa     : ${OWN_CASH} CASH
+📊 Progress : ${TOTAL_OK} OK | ${TOTAL_FAIL} FAIL | ${TOTAL} total
+🕐 Waktu    : $(date -u '+%H:%M:%S') UTC"
   fi
 }
 
@@ -428,9 +440,33 @@ echo "  GAGAL : ${TOTAL_FAIL}/${TOTAL}"
 echo -e "  Log:\n${LOG}"
 echo "============================================================"
 
-TG_MSG="<b>AgentWallet ALL CASH Run v3.0</b>
-${NOW} UTC
+# Ambil balance final
+FINAL_BAL=$(curl -s "https://frames.ag/api/wallets/${USER}/balances" \
+  -H "Authorization: Bearer ${TOKEN}" | python3 -c "
+import sys, json
+try:
+    d = json.loads(sys.stdin.read())
+    for w in d.get('solanaWallets', []):
+        for b in w.get('balances', []):
+            if b.get('asset','').upper() == 'CASH' and 'devnet' not in b.get('chain','').lower():
+                print(b.get('tokenAmount',{}).get('uiAmountString') or b.get('displayValues',{}).get('native','0'))
+                import sys; sys.exit()
+    print('0')
+except: print('0')
+" 2>/dev/null | tr -d '[:space:]')
+
+SPENT=$(python3 -c "print(f'{max(0, float("${OWN_CASH_START:-0}") - float("${FINAL_BAL:-0}")):.4f}')" 2>/dev/null || echo "?")
+
+SUMMARY_MSG="📊 AgentWallet Run Selesai
 ━━━━━━━━━━━━━━━━━━━━━
-OK: ${TOTAL_OK}/${TOTAL} | FAIL: ${TOTAL_FAIL}
-$(echo -e $LOG)"
-send_tg "$TG_MSG"
+👤 User     : ${USER}
+🕐 Waktu    : ${NOW} UTC
+━━━━━━━━━━━━━━━━━━━━━
+✅ Berhasil : ${TOTAL_OK}/${TOTAL}
+❌ Gagal    : ${TOTAL_FAIL}/${TOTAL}
+💸 Terpakai : ~${SPENT} CASH
+💰 Sisa     : ${FINAL_BAL} CASH
+━━━━━━━━━━━━━━━━━━━━━
+Detail:
+$(echo -e "${LOG}")"
+send_tg_msg "$SUMMARY_MSG"
