@@ -1,11 +1,11 @@
 #!/bin/bash
 # =============================================================
-# AgentWallet — ALL Networks + ALL Tokens v4.0
-# Jaringan: Solana (CASH/USDC/USDT), Solana Devnet (USDC),
-#           Base (USDC/USDT), Base Sepolia (USDC),
-#           Ethereum (USDC/USDT), Optimism, Polygon,
-#           Arbitrum, BNB, Gnosis, Sepolia
-# Jeda: 60 detik antar request
+# AgentWallet — ALL Networks + ALL Tokens v4.0 SAFE EDITION
+# Perubahan keamanan:
+#   1. DRY_RUN_ONLY  — test tanpa bayar (set false untuk eksekusi)
+#   2. MAX_SPEND     — batas total CASH per run
+#   3. MIN_CASH      — buffer minimum sebelum jalan
+#   4. AI Gen mahal  — dikomentari (Veo3, Sora2, DALL-E)
 # =============================================================
 
 TOKEN="${AGENTWALLET_API_TOKEN}"
@@ -14,6 +14,14 @@ TG_TOKEN="${TELEGRAM_BOT_TOKEN}"
 TG_CHAT="${TELEGRAM_CHAT_ID}"
 
 DELAY=60
+
+# ─── PENGAMAN UTAMA ──────────────────────────────────────────
+DRY_RUN_ONLY="true"   # ← "true" = test doang (CASH aman)
+                       #   "false" = eksekusi nyata
+MAX_SPEND="0.5"        # ← batas total CASH boleh keluar per run
+MIN_CASH="1.0"         # ← jangan jalan kalau saldo < nilai ini
+TOTAL_SPENT="0"
+# ─────────────────────────────────────────────────────────────
 
 if [[ -z "$TOKEN" || -z "$USER" ]]; then
   echo "Missing AGENTWALLET_API_TOKEN or AGENTWALLET_USERNAME"
@@ -29,9 +37,12 @@ LOG=""
 break_script=0
 
 echo "============================================================"
-echo "  AgentWallet - ALL Networks + ALL Tokens v4.0"
-echo "  Time : ${NOW} UTC | User: ${USER}"
-echo "  Jeda : ${DELAY}s"
+echo "  AgentWallet - ALL Networks + ALL Tokens v4.0 SAFE"
+echo "  Time        : ${NOW} UTC | User: ${USER}"
+echo "  Jeda        : ${DELAY}s"
+echo "  DRY_RUN_ONLY: ${DRY_RUN_ONLY}"
+echo "  MAX_SPEND   : ${MAX_SPEND} CASH"
+echo "  MIN_CASH    : ${MIN_CASH} CASH"
 echo "============================================================"
 
 # =============================================================
@@ -84,10 +95,9 @@ CASH_BAL="${CASH_BAL:-0}"
 LAST_BAL=$(cat "$CACHE_FILE" 2>/dev/null | tr -d '[:space:]' || echo "0")
 echo "  Sebelumnya : ${LAST_BAL} CASH | Sekarang : ${CASH_BAL} CASH"
 
-MIN_CASH="0.05"
 IS_ENOUGH=$(python3 -c "print('yes' if ${CASH_BAL} >= ${MIN_CASH} else 'no')" 2>/dev/null || echo "no")
 if [[ "$IS_ENOUGH" != "yes" ]]; then
-  echo "  SKIP: CASH ${CASH_BAL} < ${MIN_CASH}"
+  echo "  SKIP: CASH ${CASH_BAL} < ${MIN_CASH} (MIN_CASH)"
   send_tg_msg "AgentWallet SKIP
 CASH reward ${CASH_BAL} < ${MIN_CASH} — belum cukup
 User: ${USER} | ${NOW} UTC"
@@ -104,7 +114,6 @@ echo "Cek balance semua wallet..."
 ALL_BAL=$(curl -s "https://frames.ag/api/wallets/${USER}/balances" \
   -H "Authorization: Bearer ${TOKEN}")
 
-# Parsing CASH (Solana mainnet)
 OWN_CASH=$(echo "$ALL_BAL" | python3 -c "
 import sys,json
 try:
@@ -118,7 +127,6 @@ except: print('0')
 " 2>/dev/null | tr -d '[:space:]')
 OWN_CASH="${OWN_CASH:-0}"
 
-# Parsing USDC Solana
 SOL_USDC=$(echo "$ALL_BAL" | python3 -c "
 import sys,json
 try:
@@ -131,7 +139,6 @@ try:
 except: print('0')
 " 2>/dev/null | tr -d '[:space:]')
 
-# Parsing USDC Base
 BASE_USDC=$(echo "$ALL_BAL" | python3 -c "
 import sys,json
 try:
@@ -149,6 +156,13 @@ echo "  CASH (Solana)  : ${OWN_CASH}"
 echo "  USDC (Solana)  : ${SOL_USDC}"
 echo "  USDC (Base)    : ${BASE_USDC}"
 
+# Cek saldo cukup untuk MAX_SPEND
+ENOUGH_FOR_MAX=$(python3 -c "print('yes' if float('${OWN_CASH}') >= float('${MAX_SPEND}') else 'no')" 2>/dev/null || echo "no")
+if [[ "$ENOUGH_FOR_MAX" != "yes" ]]; then
+  echo "  ⚠️  PERINGATAN: Saldo ${OWN_CASH} CASH < MAX_SPEND ${MAX_SPEND} CASH"
+  echo "     Script tetap jalan tapi akan berhenti saat limit tercapai."
+fi
+
 OWN_LAST=$(cat "$OWN_CACHE" 2>/dev/null | tr -d '[:space:]' || echo "0")
 OWN_HIGHER=$(python3 -c "print('yes' if ${OWN_CASH} > ${OWN_LAST:-0} else 'no')" 2>/dev/null || echo "no")
 if [[ "$OWN_HIGHER" == "yes" && "$OWN_LAST" != "0" && -n "$OWN_LAST" ]]; then
@@ -159,7 +173,7 @@ echo "$OWN_CASH" > "$OWN_CACHE"
 OWN_CASH_START="$OWN_CASH"
 
 # =============================================================
-# UPDATE POLICY — izinkan semua chain & token
+# UPDATE POLICY
 # =============================================================
 echo ""
 echo "Update policy..."
@@ -171,7 +185,7 @@ POL_OK=$(echo "$POL" | python3 -c "import sys,json; d=json.loads(sys.stdin.read(
 echo "  Policy: ${POL_OK}"
 
 # =============================================================
-# HELPER: fungsi pay utama
+# HELPER: fungsi pay utama (dengan pengaman)
 # =============================================================
 pay() {
   local NAME="$1"
@@ -204,7 +218,7 @@ except: print('?|0|true|?')
   CHAIN=$(echo "$DRY_STATUS" | cut -d'|' -f4)
   echo "  Dry  : ${AMT} | chain=${CHAIN} | policy=${POLICY}"
 
-  # Cek balance
+  # ── PENGAMAN 1: Cek saldo wallet ──────────────────────────
   if [[ -n "$AMT_RAW" && "$AMT_RAW" != "0" ]]; then
     NEEDED=$(python3 -c "print(f'{int(\"${AMT_RAW}\")/1000000:.6f}')" 2>/dev/null || echo "0")
     ENOUGH=$(python3 -c "print('yes' if float('${OWN_CASH:-0}') >= float('${NEEDED:-0}') else 'no')" 2>/dev/null || echo "yes")
@@ -220,6 +234,25 @@ Service: ${NAME} | ${NOW} UTC"
     fi
   fi
 
+  # ── PENGAMAN 2: Cek limit MAX_SPEND ───────────────────────
+  if [[ -n "$AMT_RAW" && "$AMT_RAW" != "0" ]]; then
+    TX_COST=$(python3 -c "print(f'{int(\"${AMT_RAW}\")/1000000:.6f}')" 2>/dev/null || echo "0")
+    PROJECTED=$(python3 -c "print(f'{float(\"${TOTAL_SPENT}\")+float(\"${TX_COST}\"):.6f}')" 2>/dev/null || echo "0")
+    OVER_LIMIT=$(python3 -c "print('yes' if float('${PROJECTED}') > float('${MAX_SPEND}') else 'no')" 2>/dev/null || echo "no")
+    if [[ "$OVER_LIMIT" == "yes" ]]; then
+      echo "  STOP: limit MAX_SPEND ${MAX_SPEND} CASH akan terlampaui"
+      echo "         (Sudah keluar: ${TOTAL_SPENT} | Tx ini: ${TX_COST} | Proyeksi: ${PROJECTED})"
+      TOTAL_FAIL=$((TOTAL_FAIL + 1))
+      send_tg_msg "MAX_SPEND TERCAPAI — Stop!
+Sudah keluar : ${TOTAL_SPENT} CASH
+Limit        : ${MAX_SPEND} CASH
+Progress     : ${TOTAL_OK}OK / ${TOTAL_FAIL}FAIL / ${TOTAL}total
+Service      : ${NAME} | ${NOW} UTC"
+      break_script=1
+      return 99
+    fi
+  fi
+
   if [[ "$POLICY" == "False" || "$POLICY" == "false" ]]; then
     echo "  SKIP: policy denied"
     LOG="${LOG}\n⏸ ${NAME}: policy denied"
@@ -229,7 +262,15 @@ Service: ${NAME} | ${NOW} UTC"
 
   sleep 3
 
-  # Eksekusi
+  # ── PENGAMAN 3: DRY_RUN_ONLY mode ─────────────────────────
+  if [[ "$DRY_RUN_ONLY" == "true" ]]; then
+    echo "  ⛔ DRY_RUN_ONLY=true — SKIP eksekusi nyata (CASH aman)"
+    LOG="${LOG}\n🧪 ${NAME}: dry-only @ ${CHAIN} (${AMT})"
+    TOTAL_OK=$((TOTAL_OK + 1))
+    return
+  fi
+
+  # Eksekusi nyata
   RESULT=$(curl -s -X POST "$BASE" \
     -H "Authorization: Bearer ${TOKEN}" \
     -H "Content-Type: application/json" \
@@ -261,7 +302,9 @@ except Exception as e: print(f'FAIL|||{e}')
     TOTAL_OK=$((TOTAL_OK + 1))
     if [[ -n "$AMT_RAW" && "$AMT_RAW" != "0" ]]; then
       OWN_CASH=$(python3 -c "print(f'{float(\"${OWN_CASH:-0}\")-${AMT_RAW:-0}/1000000:.6f}')" 2>/dev/null || echo "${OWN_CASH:-0}")
+      TOTAL_SPENT=$(python3 -c "print(f'{float(\"${TOTAL_SPENT}\")+${AMT_RAW:-0}/1000000:.6f}')" 2>/dev/null || echo "$TOTAL_SPENT")
       echo "$OWN_CASH" > "$OWN_CACHE"
+      echo "  Saldo sisa: ${OWN_CASH} CASH | Total keluar: ${TOTAL_SPENT} / ${MAX_SPEND} CASH"
     fi
     # Feedback
     FB=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/feedback" \
@@ -273,6 +316,7 @@ except Exception as e: print(f'FAIL|||{e}')
 Bayar   : ${AMT_PAID}
 Chain   : ${CHAIN_PAID}
 Sisa    : ${OWN_CASH} CASH
+Keluar  : ${TOTAL_SPENT}/${MAX_SPEND} CASH
 Progress: ${TOTAL_OK}OK/${TOTAL_FAIL}FAIL/${TOTAL}total
 Waktu   : $(date -u '+%H:%M:%S') UTC"
   else
@@ -345,13 +389,14 @@ MANUAL=$(curl -s -X POST "https://frames.ag/api/wallets/${USER}/actions/x402/pay
 MANUAL_OK=$(echo "$MANUAL" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print('OK' if d.get('success') else 'FAIL')" 2>/dev/null)
 echo "  Manual x402 dry: ${MANUAL_OK}"; sleep 2
 
-send_tg_msg "AgentWallet Run Dimulai — v4.0
-User    : ${USER} | ${NOW} UTC
-Rank    : #${RANK} | Streak: ${STREAK}d | Pts: ${REF_PTS}
-Tier    : ${REF_TIER} | Refs: ${REF_CNT} | Agents: ${AGENTS}
-Sign EVM: ${SIGN_EVM_OK} | Sign SOL: ${SIGN_SOL_OK}
-Faucet  : ${FAUCET_AMT} (sisa ${FAUCET_REM}/3)
-Balance : CASH=${OWN_CASH} | USDC_SOL=${SOL_USDC} | USDC_BASE=${BASE_USDC}
+send_tg_msg "AgentWallet Run Dimulai — v4.0 SAFE
+User       : ${USER} | ${NOW} UTC
+Rank       : #${RANK} | Streak: ${STREAK}d | Pts: ${REF_PTS}
+Tier       : ${REF_TIER} | Refs: ${REF_CNT} | Agents: ${AGENTS}
+Sign EVM   : ${SIGN_EVM_OK} | Sign SOL: ${SIGN_SOL_OK}
+Faucet     : ${FAUCET_AMT} (sisa ${FAUCET_REM}/3)
+Balance    : CASH=${OWN_CASH} | USDC_SOL=${SOL_USDC} | USDC_BASE=${BASE_USDC}
+DRY_ONLY   : ${DRY_RUN_ONLY} | MAX_SPEND: ${MAX_SPEND} CASH
 Mulai x402 payments..."
 
 echo ""
@@ -398,25 +443,26 @@ pay "OpenRouter: GPT-4o [SOL/CASH]" \
   '{"url":"https://registry.frames.ag/api/service/openrouter/v1/chat/completions","method":"POST","body":{"model":"openai/gpt-4o","messages":[{"role":"user","content":"Explain quantum computing"}]},"preferredChain":"solana","preferredToken":"CASH"}'
 sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
-pay "AI Gen: Minimax Music [SOL/CASH]" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/music-01","prompt":"An upbeat electronic music track"},"preferredChain":"solana","preferredToken":"CASH"}'
-sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
+# ── AI Gen mahal — aktifkan hanya kalau yakin ─────────────────
+# pay "AI Gen: Minimax Music [SOL/CASH]" \
+#   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"minimax/music-01","prompt":"An upbeat electronic music track"},"preferredChain":"solana","preferredToken":"CASH"}'
+# sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
-pay "AI Gen: DALL-E 3 [SOL/CASH]" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/dall-e-3","prompt":"A beautiful sunset over the ocean"},"preferredChain":"solana","preferredToken":"CASH"}'
-sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
+# pay "AI Gen: DALL-E 3 [SOL/CASH]" \
+#   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/dall-e-3","prompt":"A beautiful sunset over the ocean"},"preferredChain":"solana","preferredToken":"CASH"}'
+# sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
-pay "AI Gen: Veo 3 Fast [SOL/CASH]" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3-fast","prompt":"A futuristic city with flying cars","duration":8,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"}'
-sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
+# pay "AI Gen: Veo 3 Fast [SOL/CASH]" \
+#   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3-fast","prompt":"A futuristic city with flying cars","duration":8,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"}'
+# sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
-pay "AI Gen: Sora 2 [SOL/CASH]" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2","prompt":"A stunning sunset over a futuristic city","duration":5,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"}'
-sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
+# pay "AI Gen: Sora 2 [SOL/CASH]" \
+#   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/sora-2","prompt":"A stunning sunset over a futuristic city","duration":5,"resolution":"720p"},"preferredChain":"solana","preferredToken":"CASH"}'
+# sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
-pay "AI Gen: Veo 3 [SOL/CASH]" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3","prompt":"A futuristic city neon lights","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
-sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
+# pay "AI Gen: Veo 3 [SOL/CASH]" \
+#   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"google/veo-3","prompt":"A futuristic city neon lights","duration":8,"resolution":"1080p"},"preferredChain":"solana","preferredToken":"CASH"}'
+# sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
 pay "Wordspace Agent [SOL/CASH]" \
   '{"url":"https://registry.frames.ag/api/service/wordspace/api/invoke","method":"POST","body":{"prompt":"Write a story about AI agents"},"preferredChain":"solana","preferredToken":"CASH"}'
@@ -502,9 +548,9 @@ pay "AgentMail: Send Email [BASE/USDC]" \
   '{"url":"https://registry.frames.ag/api/service/agentmail/api/send","method":"POST","body":{"inbox_id":"test","to":[{"email":"test@example.com"}],"subject":"Hello from Base","text":"Test from Base network"},"preferredChain":"evm","preferredToken":"USDC","preferredChainId":8453}'
 sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
-pay "AI Gen: DALL-E 3 [BASE/USDC]" \
-  '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/dall-e-3","prompt":"A futuristic base chain ecosystem"},"preferredChain":"evm","preferredToken":"USDC","preferredChainId":8453}'
-sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
+# pay "AI Gen: DALL-E 3 [BASE/USDC]" \
+#   '{"url":"https://registry.frames.ag/api/service/ai-gen/api/invoke","method":"POST","body":{"model":"openai/dall-e-3","prompt":"A futuristic base chain ecosystem"},"preferredChain":"evm","preferredToken":"USDC","preferredChainId":8453}'
+# sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 
 # =============================================================
 # ── BASE MAINNET — USDT ───────────────────────────────────────
@@ -662,8 +708,10 @@ sleep $DELAY; [[ $break_script -eq 1 ]] && exit 0
 echo ""
 echo "============================================================"
 echo "  SELESAI | $(date -u '+%Y-%m-%d %H:%M:%S') UTC"
-echo "  OK    : ${TOTAL_OK}/${TOTAL}"
-echo "  GAGAL : ${TOTAL_FAIL}/${TOTAL}"
+echo "  Mode        : $([ "$DRY_RUN_ONLY" == "true" ] && echo "DRY RUN (tidak ada CASH keluar)" || echo "EKSEKUSI NYATA")"
+echo "  OK          : ${TOTAL_OK}/${TOTAL}"
+echo "  GAGAL       : ${TOTAL_FAIL}/${TOTAL}"
+echo "  Total Keluar: ${TOTAL_SPENT} / ${MAX_SPEND} CASH (limit)"
 echo -e "  Log:\n${LOG}"
 echo "============================================================"
 
@@ -682,11 +730,13 @@ except: print('0')
 
 SPENT=$(python3 -c "print(f'{max(0,float(\"${OWN_CASH_START:-0}\")-float(\"${FINAL_BAL:-0}\")):.4f}')" 2>/dev/null || echo "?")
 
-send_tg_msg "AgentWallet Run Selesai — v4.0
-User     : ${USER} | ${NOW} UTC
-Berhasil : ${TOTAL_OK}/${TOTAL}
-Gagal    : ${TOTAL_FAIL}/${TOTAL}
-Terpakai : ~${SPENT} CASH
-Sisa     : ${FINAL_BAL} CASH
+send_tg_msg "AgentWallet Run Selesai — v4.0 SAFE
+User       : ${USER} | ${NOW} UTC
+Mode       : $([ "$DRY_RUN_ONLY" == "true" ] && echo "DRY RUN" || echo "EKSEKUSI NYATA")
+Berhasil   : ${TOTAL_OK}/${TOTAL}
+Gagal      : ${TOTAL_FAIL}/${TOTAL}
+Terpakai   : ~${SPENT} CASH
+Limit      : ${MAX_SPEND} CASH
+Sisa       : ${FINAL_BAL} CASH
 Detail:
 $(echo -e "${LOG}")"
