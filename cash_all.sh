@@ -121,10 +121,10 @@ try:
     for w in d.get('solanaWallets',[]):
         for b in w.get('balances',[]):
             if b.get('asset','').upper()=='CASH' and 'devnet' not in b.get('chain','').lower():
-                print(b.get('tokenAmount',{}).get('uiAmountString') or '0'); import sys; sys.exit()
+                print(b.get('tokenAmount',{}).get('uiAmountString') or '0'); sys.exit()
     print('0')
 except: print('0')
-" 2>/dev/null | tr -d '[:space:]')
+" 2>/dev/null | head -1 | tr -d '[:space:]')
 OWN_CASH="${OWN_CASH:-0}"
 
 SOL_USDC=$(echo "$ALL_BAL" | python3 -c "
@@ -134,10 +134,10 @@ try:
     for w in d.get('solanaWallets',[]):
         for b in w.get('balances',[]):
             if b.get('asset','').upper()=='USDC' and 'devnet' not in b.get('chain','').lower():
-                print(b.get('tokenAmount',{}).get('uiAmountString') or '0'); import sys; sys.exit()
+                print(b.get('tokenAmount',{}).get('uiAmountString') or '0'); sys.exit()
     print('0')
 except: print('0')
-" 2>/dev/null | tr -d '[:space:]')
+" 2>/dev/null | head -1 | tr -d '[:space:]')
 
 BASE_USDC=$(echo "$ALL_BAL" | python3 -c "
 import sys,json
@@ -147,20 +147,24 @@ try:
         for b in w.get('balances',[]):
             chain=b.get('chain','').lower()
             if b.get('asset','').upper()=='USDC' and 'base' in chain and 'sepolia' not in chain:
-                print(b.get('tokenAmount',{}).get('uiAmountString') or '0'); import sys; sys.exit()
+                print(b.get('tokenAmount',{}).get('uiAmountString') or '0'); sys.exit()
     print('0')
 except: print('0')
-" 2>/dev/null | tr -d '[:space:]')
+" 2>/dev/null | head -1 | tr -d '[:space:]')
 
 echo "  CASH (Solana)  : ${OWN_CASH}"
 echo "  USDC (Solana)  : ${SOL_USDC}"
 echo "  USDC (Base)    : ${BASE_USDC}"
 
-# Cek saldo cukup untuk MAX_SPEND
-ENOUGH_FOR_MAX=$(python3 -c "print('yes' if float('${OWN_CASH}') >= float('${MAX_SPEND}') else 'no')" 2>/dev/null || echo "no")
-if [[ "$ENOUGH_FOR_MAX" != "yes" ]]; then
-  echo "  ⚠️  PERINGATAN: Saldo ${OWN_CASH} CASH < MAX_SPEND ${MAX_SPEND} CASH"
-  echo "     Script tetap jalan tapi akan berhenti saat limit tercapai."
+# Cek saldo cukup untuk MAX_SPEND (skip kalau dry run)
+if [[ "$DRY_RUN_ONLY" != "true" ]]; then
+  ENOUGH_FOR_MAX=$(python3 -c "print('yes' if float('${OWN_CASH}') >= float('${MAX_SPEND}') else 'no')" 2>/dev/null || echo "no")
+  if [[ "$ENOUGH_FOR_MAX" != "yes" ]]; then
+    echo "  ⚠️  PERINGATAN: Saldo ${OWN_CASH} CASH < MAX_SPEND ${MAX_SPEND} CASH"
+    echo "     Script tetap jalan tapi akan berhenti saat limit tercapai."
+  fi
+else
+  echo "  ℹ️  DRY_RUN_ONLY=true — cek saldo diabaikan, CASH tidak akan keluar"
 fi
 
 OWN_LAST=$(cat "$OWN_CACHE" 2>/dev/null | tr -d '[:space:]' || echo "0")
@@ -218,7 +222,22 @@ except: print('?|0|true|?')
   CHAIN=$(echo "$DRY_STATUS" | cut -d'|' -f4)
   echo "  Dry  : ${AMT} | chain=${CHAIN} | policy=${POLICY}"
 
-  # ── PENGAMAN 1: Cek saldo wallet ──────────────────────────
+  if [[ "$POLICY" == "False" || "$POLICY" == "false" ]]; then
+    echo "  SKIP: policy denied"
+    LOG="${LOG}\n⏸ ${NAME}: policy denied"
+    TOTAL_FAIL=$((TOTAL_FAIL + 1))
+    return
+  fi
+
+  # ── PENGAMAN 1: DRY_RUN_ONLY — cek duluan, skip semua yg lain ─
+  if [[ "$DRY_RUN_ONLY" == "true" ]]; then
+    echo "  ⛔ DRY_RUN_ONLY=true — SKIP eksekusi nyata (CASH aman)"
+    LOG="${LOG}\n🧪 ${NAME}: dry-only @ ${CHAIN} (${AMT})"
+    TOTAL_OK=$((TOTAL_OK + 1))
+    return
+  fi
+
+  # ── PENGAMAN 2: Cek saldo wallet (hanya kalau eksekusi nyata) ──
   if [[ -n "$AMT_RAW" && "$AMT_RAW" != "0" ]]; then
     NEEDED=$(python3 -c "print(f'{int(\"${AMT_RAW}\")/1000000:.6f}')" 2>/dev/null || echo "0")
     ENOUGH=$(python3 -c "print('yes' if float('${OWN_CASH:-0}') >= float('${NEEDED:-0}') else 'no')" 2>/dev/null || echo "yes")
@@ -234,7 +253,7 @@ Service: ${NAME} | ${NOW} UTC"
     fi
   fi
 
-  # ── PENGAMAN 2: Cek limit MAX_SPEND ───────────────────────
+  # ── PENGAMAN 3: Cek limit MAX_SPEND (hanya kalau eksekusi nyata) ─
   if [[ -n "$AMT_RAW" && "$AMT_RAW" != "0" ]]; then
     TX_COST=$(python3 -c "print(f'{int(\"${AMT_RAW}\")/1000000:.6f}')" 2>/dev/null || echo "0")
     PROJECTED=$(python3 -c "print(f'{float(\"${TOTAL_SPENT}\")+float(\"${TX_COST}\"):.6f}')" 2>/dev/null || echo "0")
@@ -253,22 +272,7 @@ Service      : ${NAME} | ${NOW} UTC"
     fi
   fi
 
-  if [[ "$POLICY" == "False" || "$POLICY" == "false" ]]; then
-    echo "  SKIP: policy denied"
-    LOG="${LOG}\n⏸ ${NAME}: policy denied"
-    TOTAL_FAIL=$((TOTAL_FAIL + 1))
-    return
-  fi
-
   sleep 3
-
-  # ── PENGAMAN 3: DRY_RUN_ONLY mode ─────────────────────────
-  if [[ "$DRY_RUN_ONLY" == "true" ]]; then
-    echo "  ⛔ DRY_RUN_ONLY=true — SKIP eksekusi nyata (CASH aman)"
-    LOG="${LOG}\n🧪 ${NAME}: dry-only @ ${CHAIN} (${AMT})"
-    TOTAL_OK=$((TOTAL_OK + 1))
-    return
-  fi
 
   # Eksekusi nyata
   RESULT=$(curl -s -X POST "$BASE" \
